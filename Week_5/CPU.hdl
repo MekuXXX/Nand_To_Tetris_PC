@@ -1,0 +1,64 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    And (a=instruction[15], b=instruction[3], out=writeM);
+    Mux16 (a=instruction, b=aluOut, sel=instruction[15], out=aluOrInstruction);
+    Mux (a=true, b=instruction[5], sel=instruction[15], out=loadA);
+
+    ARegister (in=aluOrInstruction, load=loadA, out=aRegisterOut, out[0..14]=addressM);
+    Mux16 (a=aRegisterOut, b=inM, sel=instruction[12], out=aRegisterOrInM);
+    Mux16 (a=false, b=aRegisterOrInM, sel=instruction[15], out=aOrCInput);
+
+    Mux (a=false, b=instruction[4], sel=instruction[15], out=loadD);
+    DRegister(in=aluOut, load=loadD, out=dRegisterOut);
+    Mux16 (a=false, b=dRegisterOut, sel=instruction[15], out=dOrCInput);
+
+    ALU (x=dOrCInput, y=aOrCInput, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=aluOut, out=outM, zr=isZero, ng=isNegative);
+
+    And (a=isZero, b=instruction[1], out=jeq);
+    And (a=isNegative, b=instruction[2], out=jlt);
+
+    Or (a=isNegative, b=isZero, out=isNegativeOrIsZero);
+    Not (in=isNegativeOrIsZero, out=isPositive);
+    And (a=isPositive, b=instruction[0], out=jgt);
+
+    Or (a=jeq, b=jlt, out=jeqOrjlt);
+    Or (a=jeqOrjlt, b=jgt, out=isJump);
+
+    And (a=instruction[15], b=isJump, out=isJumpCInstruction);
+    Not (in=isJumpCInstruction, out=incrementIfNotCInstruction);
+
+    PC(in=aOrCInput, load=isJumpCInstruction, inc=incrementIfNotCInstruction, reset=reset, out[0..14]=pc);    
+}
