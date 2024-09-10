@@ -1,0 +1,3 @@
+CompileFlags:
+  Add: 
+    - "-I/home/mekux/SRC/Development/Projects/Nand_To_Tetris_PC/Week_7/include"
